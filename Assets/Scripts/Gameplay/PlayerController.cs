@@ -11,8 +11,9 @@ public class PlayerController : MonoBehaviour
 
     [Header("Movement Options")]
     [SerializeField] private float walkSpeed = 2.5f;
-    [SerializeField] private float sprintSpeed = 3.5f;
+    [SerializeField] private float sprintSpeed = 4.0f;
     private Vector3 currentMovement = Vector3.zero;
+    private CharacterController characterController;
 
     [Header("Look Options")]
     [SerializeField] private float lookSensitivity = 0.5f;
@@ -23,15 +24,16 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float jumpForce = 5.0f;
     [SerializeField] private float gravity = 9.81f;
 
-    [Header("Footstep Audio")]
+    [Header("Footstep Audio Options")]
     [SerializeField] private AudioSource footstepSource;
     [SerializeField] private AudioClip[] footstepSounds;
     [SerializeField] private float walkStepInterval = 0.6f;
     [SerializeField] private float sprintStepInterval = 0.3f;
     [SerializeField] private float velocityThreshold = 2.0f;
+    private int lastPlayedIndex = -1;
     private float nextStepTime;
 
-    private CharacterController characterController;
+    [Header("Camera Options")]
     private Camera playerCamera;
 
     private InputAction moveAction;
@@ -43,6 +45,7 @@ public class PlayerController : MonoBehaviour
     {
         characterController = GetComponent<CharacterController>();
         playerCamera = GetComponentInChildren<Camera>();
+        footstepSource = GetComponentInChildren<AudioSource>();
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -57,10 +60,21 @@ public class PlayerController : MonoBehaviour
     {
         if (controlsEnabled)
         {
-            HandleMovement();
             HandleLook();
-            FootstepLoop();
+            HandleMovement();
+            HandleFootstepLoop();
         }
+    }
+
+    void HandleLook()
+    {
+        Vector2 lookValue = lookAction.ReadValue<Vector2>() * lookSensitivity;
+        transform.Rotate(0, lookValue.x, 0);
+
+        verticalRotation -= lookValue.y;
+        verticalRotation = Mathf.Clamp(verticalRotation, -lookAngleRange, lookAngleRange);
+
+        playerCamera.transform.localRotation = Quaternion.Euler(verticalRotation, 0, 0);
     }
 
     void HandleMovement()
@@ -83,22 +97,27 @@ public class PlayerController : MonoBehaviour
         characterController.Move(currentMovement * Time.deltaTime);
     }
 
-    void FootstepLoop()
+    void HandleFootstepLoop()
     {
         float stepInterval = isSprinting() ? sprintStepInterval : walkStepInterval;
 
-        // if (characterController.isGrounded)
+        if (characterController.isGrounded && isWalking() && Time.time > nextStepTime && characterController.velocity.magnitude > velocityThreshold)
+        {
+            PlayFootstepSounds();
+            nextStepTime = Time.time + stepInterval;
+        }
     }
 
-    void HandleLook()
+    void PlayFootstepSounds()
     {
-        Vector2 lookValue = lookAction.ReadValue<Vector2>() * lookSensitivity;
-        transform.Rotate(0, lookValue.x, 0);
+        int randomIndex = Random.Range(0, footstepSounds.Length - 1);
+        if (randomIndex >= lastPlayedIndex) {
+            randomIndex++;
+        }
 
-        verticalRotation -= lookValue.y;
-        verticalRotation = Mathf.Clamp(verticalRotation, -lookAngleRange, lookAngleRange);
-
-        playerCamera.transform.localRotation = Quaternion.Euler(verticalRotation, 0, 0);
+        lastPlayedIndex = randomIndex;
+        footstepSource.clip = footstepSounds[randomIndex];
+        footstepSource.Play();
     }
 
     void HandleJump()
@@ -121,5 +140,10 @@ public class PlayerController : MonoBehaviour
     bool isSprinting()
     {
         return sprintAction.IsPressed() && sprintEnabled;
+    }
+
+    bool isWalking()
+    {
+        return moveAction.ReadValue<Vector2>().magnitude > 0;
     }
 }
